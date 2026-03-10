@@ -3,7 +3,7 @@ import { generateAPI } from '@/services/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Download, Clock, Image as ImageIcon, Wand2, Images, Trash2 } from 'lucide-react';
+import { Loader2, Download, Clock, Image as ImageIcon, Wand2, Images } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface GeneratedImage {
