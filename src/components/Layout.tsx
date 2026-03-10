@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
-  Home, Image, Images, Users, Settings, Shield, 
+  Home, Image, Images, Settings, Shield, 
   LogOut, Sparkles, Menu, X
 } from 'lucide-react';
 
@@ -25,7 +25,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       return;
     }
     
-    // 获取用户信息
     fetch('/api/auth/me', {
       headers: { Authorization: `Bearer ${token}` }
     })
@@ -63,9 +62,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   return (
     <div className="flex h-screen bg-[var(--bg-primary)] overflow-hidden">
-      {/* 侧边栏 */}
       <aside className={`${sidebarOpen ? 'w-64' : 'w-20'} transition-all duration-300 glass border-r border-[var(--border-color)] flex flex-col`}>
-        {/* LOGO区域 */}
         <div className="p-6 flex items-center gap-3 border-b border-[var(--border-color)]">
           <div className="banana-logo text-4xl">🍌</div>
           {sidebarOpen && (
@@ -76,7 +73,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           )}
         </div>
 
-        {/* 导航菜单 */}
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           {navItems.map((item) => (
             <div
@@ -90,7 +86,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           ))}
         </nav>
 
-        {/* 用户信息 */}
         <div className="p-4 border-t border-[var(--border-color)]">
           <div className={`flex items-center gap-3 mb-3 ${!sidebarOpen && 'justify-center'}`}>
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-black font-bold">
@@ -116,9 +111,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </div>
       </aside>
 
-      {/* 主内容区 */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* 顶部栏 */}
         <header className="h-16 glass border-b border-[var(--border-color)] flex items-center justify-between px-6">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -134,7 +127,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </div>
         </header>
 
-        {/* 内容 */}
         <div className="flex-1 overflow-auto p-6">
           {children}
         </div>
