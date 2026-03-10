@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, ExternalLink, Key, Check } from 'lucide-react';
+import { Plus, Trash2, ExternalLink, Key, Check, Sparkles } from 'lucide-react';
 
 interface ApiProvider {
   id: string;
