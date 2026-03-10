@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, ExternalLink, Key, Check, Sparkles } from 'lucide-react';
+import { Plus, Trash2, ExternalLink, Key, Sparkles } from 'lucide-react';
 
 interface ApiProvider {
   id: string;
@@ -85,7 +85,6 @@ export const ApiSettings: React.FC = () => {
         <p className="text-[var(--text-muted)]">配置您的API Key以开始使用图像生成功能</p>
       </div>
 
-      {/* 推荐供应商 */}
       <section>
         <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
           <Sparkles className="text-amber-400" size={20} />
@@ -117,7 +116,6 @@ export const ApiSettings: React.FC = () => {
         </div>
       </section>
 
-      {/* 我的API配置 */}
       <section>
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-semibold flex items-center gap-2">
@@ -167,7 +165,6 @@ export const ApiSettings: React.FC = () => {
         </div>
       </section>
 
-      {/* 添加模态框 */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="glass rounded-2xl p-8 max-w-md w-full space-y-6">
