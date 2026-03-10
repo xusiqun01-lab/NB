@@ -73,7 +73,7 @@ export const Img2Img: React.FC = () => {
           mode: 'img2img',
           referenceImages: [uploadedImage],
           aspectRatio: ratio,
-          provider: 'zhenzhen', // 默认或让用户选择
+          provider: 'zhenzhen',
         }),
       });
       const data = await res.json();
@@ -155,7 +155,7 @@ export const Img2Img: React.FC = () => {
         </div>
       </div>
 
-      {/* 中间：参考图片上传（右侧布局） */}
+      {/* 中间：参考图片上传 */}
       <div className="w-80 flex flex-col gap-4">
         <div className="glass rounded-2xl p-6 flex-1 flex flex-col">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -166,13 +166,11 @@ export const Img2Img: React.FC = () => {
           <div className="flex-1 border-2 border-dashed border-[var(--border-color)] rounded-xl flex flex-col items-center justify-center relative overflow-hidden hover:border-amber-500/50 transition-all group min-h-[300px]">
             {uploadedImage ? (
               <div className="relative w-full h-full p-4">
-                {/* 关键：object-contain 确保图片完整显示不被裁剪 */}
                 <img
                   src={uploadedImage}
                   alt="Reference"
                   className="w-full h-full object-contain rounded-lg"
                 />
-                {/* 删除按钮 */}
                 <button
                   onClick={() => setUploadedImage(null)}
                   className="absolute top-2 right-2 p-2 bg-red-500/80 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
@@ -194,5 +192,48 @@ export const Img2Img: React.FC = () => {
               </div>
             )}
             
-            {/* 隐藏的文件输入 */}
-            {!uploaded
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleUpload}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              disabled={uploadLoading}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 右侧：生成结果预览 */}
+      <div className="flex-1 glass rounded-2xl p-6 flex flex-col">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Wand2 size={20} className="text-amber-400" />
+          生成结果
+        </h3>
+        
+        <div className="flex-1 border border-[var(--border-color)] rounded-xl flex items-center justify-center relative overflow-hidden bg-[var(--bg-secondary)]">
+          {generatedImage ? (
+            <div className="relative w-full h-full p-4 flex items-center justify-center">
+              <img
+                src={generatedImage}
+                alt="Generated"
+                className="max-w-full max-h-full object-contain rounded-lg"
+              />
+              <button
+                onClick={handleDownload}
+                className="absolute bottom-4 right-4 btn-primary flex items-center gap-2"
+              >
+                <Download size={18} /> 下载
+              </button>
+            </div>
+          ) : (
+            <div className="text-center text-[var(--text-muted)]">
+              <div className="text-6xl mb-4 opacity-50">🎨</div>
+              <p>上传参考图并点击生成按钮开始创作</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
