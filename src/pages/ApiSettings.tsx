@@ -1,231 +1,323 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, ExternalLink, Key, Sparkles } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { apiConfig } from '@/services/api';
+import { 
+  Key, 
+  ExternalLink, 
+  Save, 
+  Trash2, 
+  Check, 
+  AlertCircle,
+  Shield,
+  Zap
+} from 'lucide-react';
+import { toast } from 'sonner';
 
-interface ApiProvider {
-  id: string;
-  name: string;
-  description: string;
-  registerUrl: string;
-  icon: string;
-}
+const PROVIDERS = [
+  { 
+    id: 'zhenzhen', 
+    name: '贞贞的AI工坊', 
+    url: 'https://ai.t8star.cn',
+    desc: '稳定的AI图像生成服务',
+    defaultBaseURL: 'https://ai.t8star.cn/v1'
+  },
+  { 
+    id: 'sillydream', 
+    name: 'SillyDream', 
+    url: 'https://wish.sillydream.top',
+    desc: '高性价比的AI图像生成API',
+    defaultBaseURL: 'https://wish.sillydream.top/v1'
+  },
+];
 
-interface ApiKey {
-  id: string;
-  provider: string;
-  name: string;
-  key: string;
-  createdAt: string;
-}
-
-export const ApiSettings: React.FC = () => {
-  const [providers, setProviders] = useState<ApiProvider[]>([]);
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState('');
-  const [newKey, setNewKey] = useState('');
-  const [keyName, setKeyName] = useState('');
+export default function ApiSettings() {
+  const [configs, setConfigs] = useState<Record<string, { apiKey: string; baseURL: string }>>({});
+  const [activeTab, setActiveTab] = useState('zhenzhen');
+  const [showKey, setShowKey] = useState(false);
 
   useEffect(() => {
-    fetchProviders();
-    fetchApiKeys();
+    loadConfigs();
   }, []);
 
-  const fetchProviders = async () => {
-    const res = await fetch('/api/providers', {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+  const loadConfigs = () => {
+    const saved = apiConfig.getAllConfigs();
+    // 确保每个provider都有baseURL
+    const normalized: Record<string, { apiKey: string; baseURL: string }> = {};
+    PROVIDERS.forEach(p => {
+      if (saved[p.id]) {
+        normalized[p.id] = {
+          ...saved[p.id],
+          baseURL: saved[p.id].baseURL || p.defaultBaseURL
+        };
+      }
     });
-    const data = await res.json();
-    setProviders(Object.entries(data).map(([id, info]: [string, any]) => ({ id, ...info })));
+    setConfigs(normalized);
   };
 
-  const fetchApiKeys = async () => {
-    const res = await fetch('/api/user/api-keys', {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-    });
-    const data = await res.json();
-    setApiKeys(data);
-  };
-
-  const handleAddKey = async () => {
-    if (!selectedProvider || !newKey) return;
+  const handleSave = (provider: string, apiKey: string, baseURL: string) => {
+    if (!apiKey.trim()) {
+      toast.error('请输入API密钥');
+      return;
+    }
     
-    await fetch('/api/user/api-keys', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token')}`
-      },
-      body: JSON.stringify({
-        provider: selectedProvider,
-        key: newKey,
-        name: keyName
-      })
-    });
-    
-    setShowAddModal(false);
-    setNewKey('');
-    setKeyName('');
-    setSelectedProvider('');
-    fetchApiKeys();
+    apiConfig.setProviderConfig(provider, { apiKey, baseURL });
+    toast.success(`${PROVIDERS.find(p => p.id === provider)?.name} API配置已保存`);
+    loadConfigs();
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('确定删除此API Key？')) return;
-    await fetch(`/api/user/api-keys/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-    });
-    fetchApiKeys();
+  const handleClear = (provider: string) => {
+    apiConfig.clearConfig(provider);
+    toast.success('配置已清除');
+    loadConfigs();
+  };
+
+  const isConfigured = (provider: string) => {
+    return !!configs[provider]?.apiKey;
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      <div>
-        <h2 className="text-3xl font-bold mb-2 text-gradient">API设置</h2>
-        <p className="text-[var(--text-muted)]">配置您的API Key以开始使用图像生成功能</p>
+    <div className="container mx-auto px-4 py-8 max-w-6xl">
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold text-white mb-2">API 设置</h1>
+        <p className="text-gray-400">配置您的API密钥以开始使用图像生成功能</p>
       </div>
 
-      <section>
-        <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-          <Sparkles className="text-amber-400" size={20} />
-          推荐供应商
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {providers.map((provider) => (
-            <div key={provider.id} className="glass rounded-2xl p-6 card-hover">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl">{provider.icon}</span>
-                  <div>
-                    <h4 className="font-bold text-lg">{provider.name}</h4>
-                    <p className="text-sm text-[var(--text-muted)]">{provider.description}</p>
+      {/* 推荐供应商 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        {PROVIDERS.map((provider) => (
+          <Card key={provider.id} className="bg-dark-card border-dark-border hover:border-banana/30 transition-colors group">
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-lg font-semibold text-white group-hover:text-banana transition-colors">
+                      {provider.name}
+                    </h3>
+                    {isConfigured(provider.id) && (
+                      <Badge className="bg-banana/20 text-banana border-0">
+                        <Check className="w-3 h-3 mr-1" />
+                        已配置
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-400 mb-3">{provider.desc}</p>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="border-dark-border hover:border-banana hover:text-banana"
+                      onClick={() => window.open(provider.url, '_blank')}
+                    >
+                      <ExternalLink className="w-3 h-3 mr-1" />
+                      前往注册
+                    </Button>
+                    {!isConfigured(provider.id) && (
+                      <Badge variant="outline" className="border-red-500/50 text-red-400">
+                        <AlertCircle className="w-3 h-3 mr-1" />
+                        未配置
+                      </Badge>
+                    )}
                   </div>
                 </div>
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-banana/20 to-orange-500/20 flex items-center justify-center">
+                  <Key className="w-6 h-6 text-banana" />
+                </div>
               </div>
-              <a
-                href={provider.registerUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-secondary w-full flex items-center justify-center gap-2 text-sm"
-              >
-                <ExternalLink size={16} />
-                前往注册获取Key
-              </a>
-            </div>
-          ))}
-        </div>
-      </section>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
-      <section>
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-semibold flex items-center gap-2">
-            <Key className="text-amber-400" size={20} />
+      {/* 配置详情 */}
+      <Card className="bg-dark-card border-dark-border">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <Shield className="w-5 h-5 text-banana" />
             我的API配置
-          </h3>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="btn-primary flex items-center gap-2 text-sm"
-          >
-            <Plus size={18} />
-            添加配置
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          {apiKeys.length === 0 ? (
-            <div className="glass rounded-2xl p-12 text-center text-[var(--text-muted)]">
-              <Key size={48} className="mx-auto mb-4 opacity-50" />
-              <p>暂无API配置，请点击右上角添加</p>
-            </div>
-          ) : (
-            apiKeys.map((key) => {
-              const provider = providers.find(p => p.id === key.provider);
-              return (
-                <div key={key.id} className="glass rounded-2xl p-6 flex items-center justify-between card-hover">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400/20 to-orange-500/20 flex items-center justify-center text-2xl">
-                      {provider?.icon || '🔑'}
-                    </div>
-                    <div>
-                      <h4 className="font-semibold">{key.name}</h4>
-                      <p className="text-sm text-[var(--text-muted)]">{provider?.name}</p>
-                      <p className="text-xs text-[var(--text-muted)] font-mono mt-1">{key.key}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDelete(key.id)}
-                    className="p-3 rounded-xl text-red-400 hover:bg-red-400/10 transition-colors"
-                  >
-                    <Trash2 size={20} />
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </section>
-
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="glass rounded-2xl p-8 max-w-md w-full space-y-6">
-            <h3 className="text-2xl font-bold text-gradient">添加API Key</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">选择供应商</label>
-                <select
-                  value={selectedProvider}
-                  onChange={(e) => setSelectedProvider(e.target.value)}
-                  className="input-elegant"
+          </CardTitle>
+          <CardDescription className="text-gray-400">
+            您的API密钥仅存储在本地浏览器中，不会上传到服务器
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="bg-dark-elevated border border-dark-border mb-6">
+              {PROVIDERS.map((p) => (
+                <TabsTrigger 
+                  key={p.id} 
+                  value={p.id}
+                  className="data-[state=active]:bg-banana data-[state=active]:text-black"
                 >
-                  <option value="">请选择</option>
-                  {providers.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-2">配置名称（可选）</label>
-                <input
-                  type="text"
-                  value={keyName}
-                  onChange={(e) => setKeyName(e.target.value)}
-                  placeholder="例如：我的贞贞Key"
-                  className="input-elegant"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-2">API Key</label>
-                <input
-                  type="password"
-                  value={newKey}
-                  onChange={(e) => setNewKey(e.target.value)}
-                  placeholder="sk-xxxxxxxxxx"
-                  className="input-elegant"
-                />
-              </div>
-            </div>
+                  {p.name}
+                  {isConfigured(p.id) && (
+                    <span className="ml-2 w-2 h-2 rounded-full bg-green-500"></span>
+                  )}
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="flex-1 btn-secondary"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleAddKey}
-                disabled={!selectedProvider || !newKey}
-                className="flex-1 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                确认添加
-              </button>
-            </div>
+            {PROVIDERS.map((provider) => (
+              <TabsContent key={provider.id} value={provider.id}>
+                <ProviderConfigForm 
+                  provider={provider}
+                  config={configs[provider.id]}
+                  onSave={(key, url) => handleSave(provider.id, key, url)}
+                  onClear={() => handleClear(provider.id)}
+                  showKey={showKey}
+                  setShowKey={setShowKey}
+                />
+              </TabsContent>
+            ))}
+          </Tabs>
+        </CardContent>
+      </Card>
+
+      {/* 使用说明 */}
+      <Card className="mt-6 bg-dark-card border-dark-border">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <Zap className="w-5 h-5 text-banana" />
+            使用说明
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-gray-400">
+          <div className="flex gap-3">
+            <div className="w-6 h-6 rounded-full bg-banana/20 text-banana flex items-center justify-center text-sm font-bold shrink-0">1</div>
+            <p>点击上方"前往注册"按钮，在供应商网站注册账号并获取API密钥</p>
           </div>
-        </div>
-      )}
+          <div className="flex gap-3">
+            <div className="w-6 h-6 rounded-full bg-banana/20 text-banana flex items-center justify-center text-sm font-bold shrink-0">2</div>
+            <p>在对应供应商的标签页中填入API密钥，点击保存</p>
+          </div>
+          <div className="flex gap-3">
+            <div className="w-6 h-6 rounded-full bg-banana/20 text-banana flex items-center justify-center text-sm font-bold shrink-0">3</div>
+            <p>配置完成后即可在生成页面使用该供应商的服务</p>
+          </div>
+          <div className="flex gap-3">
+            <div className="w-6 h-6 rounded-full bg-banana/20 text-banana flex items-center justify-center text-sm font-bold shrink-0">4</div>
+            <p>如不使用自定义API密钥，系统将使用默认配置（可能有限制）</p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
-};
+}
+
+// 单个供应商配置表单组件
+function ProviderConfigForm({ 
+  provider, 
+  config, 
+  onSave, 
+  onClear,
+  showKey,
+  setShowKey
+}: { 
+  provider: typeof PROVIDERS[0];
+  config?: { apiKey: string; baseURL: string };
+  onSave: (apiKey: string, baseURL: string) => void;
+  onClear: () => void;
+  showKey: boolean;
+  setShowKey: (show: boolean) => void;
+}) {
+  const [apiKey, setApiKey] = useState(config?.apiKey || '');
+  const [baseURL, setBaseURL] = useState(config?.baseURL || provider.defaultBaseURL);
+
+  useEffect(() => {
+    if (config) {
+      setApiKey(config.apiKey);
+      setBaseURL(config.baseURL);
+    } else {
+      setApiKey('');
+      setBaseURL(provider.defaultBaseURL);
+    }
+  }, [config, provider.defaultBaseURL]);
+
+  const hasChanges = apiKey !== (config?.apiKey || '') || baseURL !== (config?.baseURL || provider.defaultBaseURL);
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <Label className="text-white flex items-center justify-between">
+          API 密钥
+          <span className="text-xs text-gray-500">必填</span>
+        </Label>
+        <div className="relative">
+          <Input
+            type={showKey ? "text" : "password"}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={`请输入${provider.name}的API密钥`}
+            className="bg-dark-elevated border-dark-border text-white pr-20 font-mono"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+            onClick={() => setShowKey(!showKey)}
+          >
+            {showKey ? '隐藏' : '显示'}
+          </Button>
+        </div>
+        <p className="text-xs text-gray-500">
+          格式通常为：sk-xxxxxxxxxxxxxxxxxxxxxxxx
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-white flex items-center justify-between">
+          API 地址
+          <span className="text-xs text-gray-500">选填</span>
+        </Label>
+        <Input
+          value={baseURL}
+          onChange={(e) => setBaseURL(e.target.value)}
+          placeholder={provider.defaultBaseURL}
+          className="bg-dark-elevated border-dark-border text-white font-mono"
+        />
+        <p className="text-xs text-gray-500">
+          默认地址：{provider.defaultBaseURL}
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between pt-4 border-t border-dark-border">
+        <div className="flex items-center gap-2">
+          <Switch 
+            checked={!!config?.apiKey}
+            disabled
+            className="data-[state=checked]:bg-banana"
+          />
+          <span className="text-sm text-gray-400">
+            {config?.apiKey ? '已启用自定义API' : '使用默认配置'}
+          </span>
+        </div>
+        
+        <div className="flex gap-2">
+          {config?.apiKey && (
+            <Button 
+              variant="outline" 
+              onClick={onClear}
+              className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-400"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              清除配置
+            </Button>
+          )}
+          <Button 
+            onClick={() => onSave(apiKey, baseURL)}
+            disabled={!hasChanges && !!config?.apiKey}
+            className="bg-banana text-black hover:bg-banana-dark"
+          >
+            <Save className="w-4 h-4 mr-2" />
+            保存配置
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
