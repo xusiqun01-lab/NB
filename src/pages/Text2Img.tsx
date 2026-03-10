@@ -18,14 +18,38 @@ export const Text2Img: React.FC = () => {
   const [result, setResult] = useState<string | null>(null);
 
   const handleGenerate = async () => {
+    if (!prompt) return;
+    
     setLoading(true);
-    // ... 调用API生成图片
-    setLoading(false);
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({
+          prompt,
+          mode: 'text2img',
+          aspectRatio: ratio,
+          provider: 'zhenzhen',
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setResult(data.imageUrl || data.imageBase64);
+      } else {
+        alert(data.error || '生成失败');
+      }
+    } catch (error) {
+      alert('生成失败');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="max-w-7xl mx-auto h-full flex gap-6">
-      {/* 左侧：参数设置 */}
       <div className="w-96 space-y-6 overflow-auto">
         <div className="glass rounded-2xl p-6 space-y-6">
           <h2 className="text-2xl font-bold text-gradient">文生图</h2>
@@ -74,7 +98,6 @@ export const Text2Img: React.FC = () => {
         </div>
       </div>
 
-      {/* 右侧：预览区域 */}
       <div className="flex-1 glass rounded-2xl p-8 flex items-center justify-center relative overflow-hidden">
         {result ? (
           <div className="relative w-full h-full flex items-center justify-center">
@@ -85,7 +108,12 @@ export const Text2Img: React.FC = () => {
             />
             <button
               className="absolute bottom-4 right-4 btn-primary flex items-center gap-2"
-              onClick={() => {/* 下载图片 */}}
+              onClick={() => {
+                const link = document.createElement('a');
+                link.href = result;
+                link.download = `generated-${Date.now()}.png`;
+                link.click();
+              }}
             >
               <Download size={18} /> 下载
             </button>
