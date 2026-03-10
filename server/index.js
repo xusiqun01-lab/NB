@@ -46,6 +46,15 @@ function writeJSON(filePath, data) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
+// 加密/解密API Key（简单加密，生产环境建议用更安全的方案）
+function encryptKey(key) {
+  return Buffer.from(key).toString('base64');
+}
+
+function decryptKey(encryptedKey) {
+  return Buffer.from(encryptedKey, 'base64').toString('ascii');
+}
+
 // 中间件
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -68,7 +77,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ 
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
 // 认证中间件
@@ -94,6 +103,24 @@ const adminMiddleware = (req, res, next) => {
   next();
 };
 
+// API供应商配置（移除硬编码Key，只保留基础配置）
+const API_PROVIDERS = {
+  zhenzhen: {
+    name: '贞贞的AI工坊',
+    baseURL: 'https://ai.t8star.cn/v1',
+    registerUrl: 'https://ai.t8star.cn',
+    description: '稳定的AI图像生成服务',
+    icon: '🔮'
+  },
+  sillydream: {
+    name: 'SillyDream',
+    baseURL: 'https://wish.sillydream.top/v1',
+    registerUrl: 'https://wish.sillydream.top',
+    description: '高性价比的AI图像生成API',
+    icon: '✨'
+  }
+};
+
 // ===== 用户认证路由 =====
 
 // 注册
@@ -107,28 +134,25 @@ app.post('/api/auth/register', async (req, res) => {
     
     const users = readJSON(USERS_FILE);
     
-    // 检查邮箱是否已存在
     if (users.find(u => u.email === email)) {
       return res.status(400).json({ error: '该邮箱已被注册' });
     }
     
-    // 加密密码
     const hashedPassword = await bcrypt.hash(password, 10);
     
-    // 创建用户
     const newUser = {
       id: Date.now().toString(),
       email,
       password: hashedPassword,
-      role: users.length === 0 ? 'admin' : 'user', // 第一个用户为管理员
+      role: users.length === 0 ? 'admin' : 'user',
       createdAt: new Date().toISOString(),
-      generationCount: 0
+      generationCount: 0,
+      apiKeys: [] // 存储用户自己的API Key [{provider, key, name}]
     };
     
     users.push(newUser);
     writeJSON(USERS_FILE, users);
     
-    // 生成JWT
     const token = jwt.sign(
       { userId: newUser.id, email: newUser.email, role: newUser.role },
       JWT_SECRET,
@@ -140,7 +164,8 @@ app.post('/api/auth/register', async (req, res) => {
       user: {
         id: newUser.id,
         email: newUser.email,
-        role: newUser.role
+        role: newUser.role,
+        generationCount: 0
       }
     });
   } catch (error) {
@@ -177,7 +202,8 @@ app.post('/api/auth/login', async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
-        role: user.role
+        role: user.role,
+        generationCount: user.generationCount || 0
       }
     });
   } catch (error) {
@@ -197,59 +223,123 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
     id: user.id,
     email: user.email,
     role: user.role,
-    generationCount: user.generationCount
+    generationCount: user.generationCount || 0,
+    apiKeys: user.apiKeys ? user.apiKeys.map(k => ({...k, key: '***'})) : [] // 隐藏真实Key
   });
 });
 
-// ===== 图像生成路由 =====
+// ===== API Key 管理路由 =====
 
-// API配置
-const API_PROVIDERS = {
-  zhenzhen: {
-    baseURL: 'https://ai.t8star.cn/v1',
-    apiKey: process.env.ZHENZHEN_API_KEY || 'sk-JgRCJUhqOQGWZFqwmy0yKtrLCzndPdOuXvg7dYJaQe9Zqb7B'
-  },
-  sillydream: {
-    baseURL: 'https://wish.sillydream.top/v1',
-    apiKey: process.env.SILLYDREAM_API_KEY || 'sk-FVloorNCjI45pHYrBwqCHnvPU8SvRaPbFRH5iYMlQ5Mwu3yF'
+// 获取支持的供应商列表
+app.get('/api/providers', authMiddleware, (req, res) => {
+  res.json(API_PROVIDERS);
+});
+
+// 获取用户的API配置（脱敏）
+app.get('/api/user/api-keys', authMiddleware, (req, res) => {
+  const users = readJSON(USERS_FILE);
+  const user = users.find(u => u.id === req.user.userId);
+  if (!user) return res.status(404).json({ error: '用户不存在' });
+  
+  res.json(user.apiKeys ? user.apiKeys.map(k => ({
+    id: k.id,
+    provider: k.provider,
+    name: k.name,
+    createdAt: k.createdAt,
+    key: k.key.substring(0, 10) + '...' // 只显示前10位
+  })) : []);
+});
+
+// 添加API Key
+app.post('/api/user/api-keys', authMiddleware, (req, res) => {
+  try {
+    const { provider, key, name } = req.body;
+    
+    if (!provider || !key) {
+      return res.status(400).json({ error: '请提供供应商和API Key' });
+    }
+    
+    if (!API_PROVIDERS[provider]) {
+      return res.status(400).json({ error: '无效的供应商' });
+    }
+    
+    const users = readJSON(USERS_FILE);
+    const userIndex = users.findIndex(u => u.id === req.user.userId);
+    
+    if (userIndex === -1) return res.status(404).json({ error: '用户不存在' });
+    
+    if (!users[userIndex].apiKeys) users[userIndex].apiKeys = [];
+    
+    const newKey = {
+      id: Date.now().toString(),
+      provider,
+      key: encryptKey(key), // 加密存储
+      name: name || API_PROVIDERS[provider].name,
+      createdAt: new Date().toISOString()
+    };
+    
+    users[userIndex].apiKeys.push(newKey);
+    writeJSON(USERS_FILE, users);
+    
+    res.json({ success: true, id: newKey.id });
+  } catch (error) {
+    console.error('添加API Key错误:', error);
+    res.status(500).json({ error: '添加失败' });
   }
-};
+});
+
+// 删除API Key
+app.delete('/api/user/api-keys/:id', authMiddleware, (req, res) => {
+  try {
+    const { id } = req.params;
+    const users = readJSON(USERS_FILE);
+    const userIndex = users.findIndex(u => u.id === req.user.userId);
+    
+    if (userIndex === -1) return res.status(404).json({ error: '用户不存在' });
+    
+    users[userIndex].apiKeys = users[userIndex].apiKeys.filter(k => k.id !== id);
+    writeJSON(USERS_FILE, users);
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: '删除失败' });
+  }
+});
+
+// ===== 图像生成路由 =====
 
 // 生成图像
 app.post('/api/generate', authMiddleware, async (req, res) => {
   try {
     const { prompt, provider, model, size, aspectRatio, mode, referenceImages } = req.body;
     
-    const providerConfig = API_PROVIDERS[provider];
-    if (!providerConfig) {
-      return res.status(400).json({ error: '无效的API供应商' });
+    if (!provider) {
+      return res.status(400).json({ error: '请选择API供应商' });
     }
+    
+    // 获取用户的API Key
+    const users = readJSON(USERS_FILE);
+    const user = users.find(u => u.id === req.user.userId);
+    
+    if (!user.apiKeys || user.apiKeys.length === 0) {
+      return res.status(400).json({ error: '请先配置API Key' });
+    }
+    
+    const userKeyConfig = user.apiKeys.find(k => k.provider === provider);
+    if (!userKeyConfig) {
+      return res.status(400).json({ error: `您未配置${API_PROVIDERS[provider]?.name || provider}的API Key` });
+    }
+    
+    const providerConfig = API_PROVIDERS[provider];
+    const apiKey = decryptKey(userKeyConfig.key);
     
     // 构建消息内容
     let messageContent;
     
     if (mode === 'text2img') {
-      // 文生图
       messageContent = prompt;
-    } else if (mode === 'img2img' && referenceImages && referenceImages.length > 0) {
-      // 图生图
-      messageContent = [
-        { type: 'text', text: prompt }
-      ];
-      
-      // 添加参考图片
-      for (const imgUrl of referenceImages) {
-        messageContent.push({
-          type: 'image_url',
-          image_url: { url: imgUrl }
-        });
-      }
-    } else if (mode === 'multiImg' && referenceImages && referenceImages.length > 0) {
-      // 多图参考
-      messageContent = [
-        { type: 'text', text: prompt }
-      ];
-      
+    } else if ((mode === 'img2img' || mode === 'multiImg') && referenceImages && referenceImages.length > 0) {
+      messageContent = [{ type: 'text', text: prompt }];
       for (const imgUrl of referenceImages) {
         messageContent.push({
           type: 'image_url',
@@ -269,17 +359,15 @@ app.post('/api/generate', authMiddleware, async (req, res) => {
       },
       {
         headers: {
-          'Authorization': `Bearer ${providerConfig.apiKey}`,
+          'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
         timeout: 120000
       }
     );
     
-    // 解析返回结果
     const content = response.data.choices[0]?.message?.content || '';
     
-    // 提取图片URL或base64
     let imageUrl = null;
     let imageBase64 = null;
     
@@ -312,7 +400,6 @@ app.post('/api/generate', authMiddleware, async (req, res) => {
     writeJSON(IMAGES_FILE, images);
     
     // 更新用户生成次数
-    const users = readJSON(USERS_FILE);
     const userIndex = users.findIndex(u => u.id === req.user.userId);
     if (userIndex !== -1) {
       users[userIndex].generationCount = (users[userIndex].generationCount || 0) + 1;
@@ -338,7 +425,7 @@ app.post('/api/generate', authMiddleware, async (req, res) => {
   }
 });
 
-// 上传图片（用于图生图）
+// 上传图片
 app.post('/api/upload', authMiddleware, upload.single('image'), (req, res) => {
   try {
     if (!req.file) {
@@ -350,7 +437,6 @@ app.post('/api/upload', authMiddleware, upload.single('image'), (req, res) => {
     const base64 = fileData.toString('base64');
     const mimeType = req.file.mimetype;
     
-    // 删除临时文件
     fs.unlinkSync(filePath);
     
     res.json({
@@ -376,7 +462,7 @@ app.get('/api/history', authMiddleware, (req, res) => {
   }
 });
 
-// ===== 管理员路由 =====
+// ===== 管理员路由（仅管理员可访问）=====
 
 // 获取所有用户（管理员）
 app.get('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
@@ -391,7 +477,6 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
     }));
     res.json(sanitizedUsers);
   } catch (error) {
-    console.error('获取用户错误:', error);
     res.status(500).json({ error: '获取用户列表失败' });
   }
 });
@@ -414,7 +499,6 @@ app.put('/api/admin/users/:id/role', authMiddleware, adminMiddleware, (req, res)
     
     res.json({ success: true });
   } catch (error) {
-    console.error('更新角色错误:', error);
     res.status(500).json({ error: '更新角色失败' });
   }
 });
@@ -428,14 +512,12 @@ app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, (req, res) =
     const filteredUsers = users.filter(u => u.id !== id);
     writeJSON(USERS_FILE, filteredUsers);
     
-    // 同时删除该用户的生成记录
     const images = readJSON(IMAGES_FILE);
     const filteredImages = images.filter(img => img.userId !== id);
     writeJSON(IMAGES_FILE, filteredImages);
     
     res.json({ success: true });
   } catch (error) {
-    console.error('删除用户错误:', error);
     res.status(500).json({ error: '删除用户失败' });
   }
 });
@@ -456,7 +538,6 @@ app.get('/api/admin/images', authMiddleware, adminMiddleware, (req, res) => {
     
     res.json(enrichedImages);
   } catch (error) {
-    console.error('获取图像错误:', error);
     res.status(500).json({ error: '获取图像列表失败' });
   }
 });
@@ -477,7 +558,6 @@ app.get('/api/admin/stats', authMiddleware, adminMiddleware, (req, res) => {
       adminCount: users.filter(u => u.role === 'admin').length
     });
   } catch (error) {
-    console.error('获取统计错误:', error);
     res.status(500).json({ error: '获取统计数据失败' });
   }
 });
@@ -487,7 +567,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// 前端路由处理（修复 Express 5 兼容性）
+// 前端路由处理
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
