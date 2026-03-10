@@ -1,5 +1,4 @@
 import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Upload, Wand2, Download, Loader2, X, ImagePlus } from 'lucide-react';
 
 const ASPECT_RATIOS = [
@@ -13,7 +12,6 @@ const ASPECT_RATIOS = [
 ];
 
 export const Img2Img: React.FC = () => {
-  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [prompt, setPrompt] = useState('');
@@ -23,7 +21,6 @@ export const Img2Img: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
 
-  // 上传图片
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -49,7 +46,6 @@ export const Img2Img: React.FC = () => {
     }
   };
 
-  // 生成图片
   const handleGenerate = async () => {
     if (!uploadedImage) {
       alert('请先上传参考图片');
@@ -89,7 +85,6 @@ export const Img2Img: React.FC = () => {
     }
   };
 
-  // 下载图片
   const handleDownload = () => {
     if (!generatedImage) return;
     const link = document.createElement('a');
@@ -100,7 +95,6 @@ export const Img2Img: React.FC = () => {
 
   return (
     <div className="h-full flex gap-6 overflow-hidden">
-      {/* 左侧：参数设置 */}
       <div className="w-80 flex flex-col gap-4 overflow-auto pr-2">
         <div className="glass rounded-2xl p-6 space-y-6">
           <h2 className="text-2xl font-bold text-gradient">图生图</h2>
@@ -108,7 +102,6 @@ export const Img2Img: React.FC = () => {
             上传参考图片，AI基于原图创作新作品
           </p>
 
-          {/* 画面描述 */}
           <div>
             <label className="block text-sm font-medium mb-2">画面描述</label>
             <textarea
@@ -120,7 +113,6 @@ export const Img2Img: React.FC = () => {
             />
           </div>
 
-          {/* 画面比例 */}
           <div>
             <label className="block text-sm font-medium mb-2">画面比例</label>
             <div className="grid grid-cols-3 gap-2">
@@ -140,7 +132,6 @@ export const Img2Img: React.FC = () => {
             </div>
           </div>
 
-          {/* 生成按钮 */}
           <button
             onClick={handleGenerate}
             disabled={loading || !prompt || !uploadedImage}
@@ -155,7 +146,6 @@ export const Img2Img: React.FC = () => {
         </div>
       </div>
 
-      {/* 中间：参考图片上传 */}
       <div className="w-80 flex flex-col gap-4">
         <div className="glass rounded-2xl p-6 flex-1 flex flex-col">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -204,7 +194,6 @@ export const Img2Img: React.FC = () => {
         </div>
       </div>
 
-      {/* 右侧：生成结果预览 */}
       <div className="flex-1 glass rounded-2xl p-6 flex flex-col">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Wand2 size={20} className="text-amber-400" />
