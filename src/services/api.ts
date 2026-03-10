@@ -1,93 +1,166 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = 'http://localhost:3001/api';
 
-// 创建axios实例
-const api = axios.create({
+// 创建 axios 实例
+const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    'Content-Type': 'application/json'
-  }
+    'Content-Type': 'application/json',
+  },
 });
 
-// 请求拦截器 - 添加token
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
+// 请求拦截器 - 添加认证令牌和API配置
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// API配置管理
+export const apiConfig = {
+  getProviderConfig: (provider: string) => {
+    const configs = JSON.parse(localStorage.getItem('apiConfigs') || '{}');
+    return configs[provider] || null;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// 响应拦截器 - 处理错误
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
-
-// 认证相关
-export const authAPI = {
-  register: (email: string, password: string) =>
-    api.post('/api/auth/register', { email, password }),
   
-  login: (email: string, password: string) =>
-    api.post('/api/auth/login', { email, password }),
+  setProviderConfig: (provider: string, config: { apiKey: string; baseURL?: string }) => {
+    const configs = JSON.parse(localStorage.getItem('apiConfigs') || '{}');
+    configs[provider] = {
+      ...config,
+      baseURL: config.baseURL || (provider === 'zhenzhen' 
+        ? 'https://ai.t8star.cn/v1' 
+        : 'https://wish.sillydream.top/v1')
+    };
+    localStorage.setItem('apiConfigs', JSON.stringify(configs));
+  },
   
-  getMe: () =>
-    api.get('/api/auth/me'),
+  getAllConfigs: () => {
+    return JSON.parse(localStorage.getItem('apiConfigs') || '{}');
+  },
+  
+  clearConfig: (provider: string) => {
+    const configs = JSON.parse(localStorage.getItem('apiConfigs') || '{}');
+    delete configs[provider];
+    localStorage.setItem('apiConfigs', JSON.stringify(configs));
+  }
 };
 
-// 图像生成相关
+// 认证相关API
+export const authAPI = {
+  login: (email: string, password: string) => 
+    apiClient.post('/auth/login', { email, password }),
+  
+  register: (email: string, password: string) => 
+    apiClient.post('/auth/register', { email, password }),
+  
+  getMe: () => 
+    apiClient.get('/auth/me'),
+};
+
+// 生成相关API
 export const generateAPI = {
-  generate: (data: {
+  generate: async (params: {
     prompt: string;
     provider: string;
     model: string;
     size: string;
     aspectRatio: string;
-    mode: 'text2img' | 'img2img' | 'multiImg';
+    mode: string;
     referenceImages?: string[];
-  }) => api.post('/api/generate', data),
+  }) => {
+    // 获取用户配置的API密钥
+    const config = apiConfig.getProviderConfig(params.provider);
+    
+    // 如果用户配置了API密钥，使用用户配置的
+    if (config?.apiKey) {
+      // 直接调用供应商API
+      const response = await axios.post(
+        `${config.baseURL}/chat/completions`,
+        {
+          model: params.model,
+          messages: [{ 
+            role: 'user', 
+            content: params.mode === 'text2img' 
+              ? params.prompt 
+              : [{ type: 'text', text: params.prompt }, ...(
+                  params.referenceImages?.map(url => ({
+                    type: 'image_url',
+                    image_url: { url }
+                  })) || []
+                )]
+          }]
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${config.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 120000
+        }
+      );
+      
+      // 解析返回结果
+      const content = response.data.choices[0]?.message?.content || '';
+      let imageUrl = null;
+      let imageBase64 = null;
+      
+      const markdownMatch = content.match(/!\[image\]\((.*?)\)/);
+      if (markdownMatch) {
+        const url = markdownMatch[1];
+        if (url.startsWith('data:')) {
+          imageBase64 = url;
+        } else {
+          imageUrl = url;
+        }
+      }
+      
+      return {
+        data: {
+          success: true,
+          imageUrl,
+          imageBase64,
+          id: Date.now().toString()
+        }
+      };
+    } else {
+      // 使用后端代理
+      return apiClient.post('/generate', params);
+    }
+  },
   
   uploadImage: (file: File) => {
     const formData = new FormData();
     formData.append('image', file);
-    return api.post('/api/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+    return apiClient.post('/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
     });
   },
   
-  getHistory: () =>
-    api.get('/api/history'),
+  getHistory: () => 
+    apiClient.get('/history'),
 };
 
-// 管理员相关
+// 管理员API
 export const adminAPI = {
-  getUsers: () =>
-    api.get('/api/admin/users'),
+  getUsers: () => 
+    apiClient.get('/admin/users'),
   
-  updateUserRole: (userId: string, role: string) =>
-    api.put(`/api/admin/users/${userId}/role`, { role }),
+  updateUserRole: (userId: string, role: string) => 
+    apiClient.put(`/admin/users/${userId}/role`, { role }),
   
-  deleteUser: (userId: string) =>
-    api.delete(`/api/admin/users/${userId}`),
+  deleteUser: (userId: string) => 
+    apiClient.delete(`/admin/users/${userId}`),
   
-  getAllImages: () =>
-    api.get('/api/admin/images'),
+  getAllImages: () => 
+    apiClient.get('/admin/images'),
   
-  getStats: () =>
-    api.get('/api/admin/stats'),
+  getStats: () => 
+    apiClient.get('/admin/stats'),
 };
 
-export default api;
+export default apiClient;
